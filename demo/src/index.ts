@@ -1,121 +1,189 @@
-import { ClaudeClient } from '@/claude/client.js';
-import { ProjectManager } from '@/agents/ProjectManager.js';
-import { Coder } from '@/agents/Coder.js';
-import { BaseTool } from '@/tools/base.js';
-import { readFileSync } from 'fs';
-import { config } from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { Agent } from '../../src/agents/base/Agent.js';
+import { RedisBackplane } from '../../src/backplane/redis/index.js';
+import { ClaudeClient } from '../../src/claude/client.js';
+import { Tool } from '../../src/tools/base.js';
 
-// Load environment variables
-config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-class WriteFileTool extends BaseTool {
-  name = 'write_to_file';
-  description = 'Write content to a file at the specified path';
-  parameters = [
-    {
-      name: 'path',
-      type: 'string',
-      description: 'File path relative to the project root',
-      required: true
-    },
-    {
-      name: 'content',
-      type: 'string',
-      description: 'Content to write to the file',
-      required: true
-    }
-  ];
-  requiresApproval = true;
-
-  async executeImpl({ path, content }: { path: string; content: string }) {
-    // Implementation would use the actual tool system
-    console.log(`Writing to ${path}:`);
-    console.log(content);
-    return { success: true };
+// Initialize backplane
+const backplane = new RedisBackplane({
+  host: 'localhost',
+  port: 6379,
+  prefix: 'demo:',
+  pubsub: {
+    messageChannel: 'demo:messages',
+    contextChannel: 'demo:context',
+    discoveryChannel: 'demo:discovery'
   }
-}
+});
 
-class ExecuteCommandTool extends BaseTool {
-  name = 'execute_command';
-  description = 'Execute a shell command';
-  parameters = [
-    {
-      name: 'command',
-      type: 'string',
-      description: 'Command to execute',
-      required: true
-    },
-    {
-      name: 'requires_approval',
-      type: 'boolean',
-      description: 'Whether the command requires user approval',
-      required: true
+// Initialize Claude client
+const claude = new ClaudeClient({
+  apiKey: process.env.CLAUDE_API_KEY!
+});
+
+// Define available tools
+const tools: Tool[] = [
+  {
+    name: 'write_to_file',
+    description: 'Write content to a file',
+    parameters: [
+      {
+        name: 'path',
+        type: 'string',
+        description: 'Path to write the file to'
+      },
+      {
+        name: 'content',
+        type: 'string',
+        description: 'Content to write to the file'
+      }
+    ],
+    requiresApproval: true,
+    execute: async (params: unknown) => {
+      const { path, content } = params as { path: string; content: string };
+      const startTime = new Date();
+      // Implementation would go here
+      const endTime = new Date();
+      return {
+        success: true,
+        output: `Wrote to ${path}`,
+        metadata: {
+          startTime,
+          endTime,
+          duration: endTime.getTime() - startTime.getTime(),
+          resourcesUsed: [path],
+          dependencies: []
+        }
+      };
     }
-  ];
-  requiresApproval = true;
-
-  async executeImpl({ command }: { command: string; requires_approval: boolean }) {
-    console.log(`Executing: ${command}`);
-    return { success: true };
+  },
+  {
+    name: 'read_file',
+    description: 'Read content from a file',
+    parameters: [
+      {
+        name: 'path',
+        type: 'string',
+        description: 'Path to read the file from'
+      }
+    ],
+    requiresApproval: false,
+    execute: async (params: unknown) => {
+      const { path } = params as { path: string };
+      const startTime = new Date();
+      // Implementation would go here
+      const endTime = new Date();
+      return {
+        success: true,
+        output: `Content from ${path}`,
+        metadata: {
+          startTime,
+          endTime,
+          duration: endTime.getTime() - startTime.getTime(),
+          resourcesUsed: [path],
+          dependencies: []
+        }
+      };
+    }
+  },
+  {
+    name: 'execute_command',
+    description: 'Execute a shell command',
+    parameters: [
+      {
+        name: 'command',
+        type: 'string',
+        description: 'Command to execute'
+      }
+    ],
+    requiresApproval: true,
+    execute: async (params: unknown) => {
+      const { command } = params as { command: string };
+      const startTime = new Date();
+      // Implementation would go here
+      const endTime = new Date();
+      return {
+        success: true,
+        output: `Executed: ${command}`,
+        metadata: {
+          startTime,
+          endTime,
+          duration: endTime.getTime() - startTime.getTime(),
+          resourcesUsed: [],
+          dependencies: []
+        }
+      };
+    }
   }
-}
+];
 
 async function main() {
-  // Initialize Claude client
-  const claude = new ClaudeClient({
-    apiKey: process.env.CLAUDE_API_KEY || ''
-  });
+  try {
+    // Connect backplane
+    await backplane.connect({
+      host: 'localhost',
+      port: 6379
+    });
 
-  // Initialize tools
-  const tools = [
-    new WriteFileTool(),
-    new ExecuteCommandTool()
-  ];
+    // Create agents with different roles
+    const coder = new Agent({
+      rolePath: 'src/roles/coder.json',
+      tools,
+      claude,
+      backplane
+    });
 
-  // Create agents
-  const projectManager = new ProjectManager({
-    claude,
-    tools,
-    contextLimit: 100000,
-    role: 'Project Manager'
-  });
+    const projectManager = new Agent({
+      rolePath: 'src/roles/project-manager.json',
+      tools,
+      claude,
+      backplane
+    });
 
-  const coder = new Coder({
-    claude,
-    tools,
-    contextLimit: 100000,
-    role: 'Software Engineer'
-  });
+    // Initialize agents
+    await Promise.all([
+      coder.init({
+        rolePath: 'src/roles/coder.json',
+        tools,
+        claude,
+        backplane
+      }),
+      projectManager.init({
+        rolePath: 'src/roles/project-manager.json',
+        tools,
+        claude,
+        backplane
+      })
+    ]);
 
-  // Connect agents
-  coder.setProjectManager(projectManager);
+    // Example: Project manager creates a project and assigns tasks
+    const result = await projectManager.execute({
+      goal: 'Create a new web application',
+      task: 'Plan project and assign initial tasks',
+      data: {
+        requirements: `
+Create a simple todo list application with:
+- Add/edit/delete tasks
+- Mark tasks as complete
+- Filter by status
+- Store in localStorage
+- Responsive design`
+      }
+    });
 
-  // Load project requirements
-  const requirements = readFileSync(
-    join(__dirname, '../requirements.md'),
-    'utf-8'
-  );
+    console.log('Project planning result:', result);
 
-  console.log('Creating project plan...');
-  const plan = await projectManager.createProject(requirements);
-  console.log('Project plan:', JSON.stringify(plan, null, 2));
+    // Clean up
+    await Promise.all([
+      coder.cleanup(),
+      projectManager.cleanup()
+    ]);
 
-  // Start assigning tasks
-  console.log('\nAssigning initial tasks...');
-  await projectManager.assignTasks(coder);
-
-  // The agents will now work together through the task pipeline:
-  // 1. Project manager assigns tasks
-  // 2. Coder implements tasks
-  // 3. Project manager reviews code
-  // 4. Coder fixes any issues
-  // 5. Project manager assigns next tasks
-  // This continues until all tasks are completed
+    await backplane.disconnect();
+  } catch (error) {
+    console.error('Error in demo:', error);
+    process.exit(1);
+  }
 }
 
+// Run demo
 main().catch(console.error);

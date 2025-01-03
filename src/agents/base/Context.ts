@@ -101,6 +101,7 @@ function isValidThread(thread: unknown): thread is ContextThread {
 }
 
 export class Context {
+  private id: string;
   private nodes: ContextNode[] = [];
   private threads: Map<string, ContextThread> = new Map();
   private summaries: Map<string, string> = new Map();
@@ -110,6 +111,7 @@ export class Context {
   private vectorStore: VectorStore;
 
   constructor(config: ContextConfig) {
+    this.id = `context-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     this.config = config;
     this.claude = config.claude;
     this.embeddings = config.embeddings ?? new SimpleEmbeddingsProvider();
@@ -120,6 +122,10 @@ export class Context {
       similarity: 'cosine',
       backend: 'memory'
     });
+  }
+
+  getId(): string {
+    return this.id;
   }
 
   async initialize(): Promise<void> {
