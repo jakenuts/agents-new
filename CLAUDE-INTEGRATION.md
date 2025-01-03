@@ -345,7 +345,7 @@ class ToolRegistry {
 // Initialize Claude client
 const claude = new ClaudeClient({
   apiKey: process.env.CLAUDE_API_KEY,
-  model: 'claude-3-opus-20240229',
+  model: 'claude-3-5-sonnet-20241022',
   cacheConfig: {
     enabled: true,
     maxSize: 1000,

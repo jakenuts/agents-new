@@ -1,4 +1,6 @@
 import type { ClaudeClient } from '../../claude/client.js';
+import type { EmbeddingsProvider } from '../../embeddings/base.js';
+import { SimpleEmbeddingsProvider } from '../../embeddings/base.js';
 import { VectorStore, VectorStoreConfig, createVectorStore, VectorEntry } from './VectorStore.js';
 
 export interface MemoryConfig {
@@ -6,6 +8,7 @@ export interface MemoryConfig {
   summarizeInterval: string;
   pruneThreshold: number;
   claude: ClaudeClient;
+  embeddings?: EmbeddingsProvider;
   vectorStore?: VectorStoreConfig;
 }
 
@@ -45,15 +48,17 @@ export class Memory {
   private nodes: MemoryNode[] = [];
   private config: MemoryConfig;
   private claude: ClaudeClient;
+  private embeddings: EmbeddingsProvider;
   private vectorStore: VectorStore;
 
   constructor(config: MemoryConfig) {
     this.config = config;
     this.claude = config.claude;
+    this.embeddings = config.embeddings ?? new SimpleEmbeddingsProvider();
 
     // Initialize vector store
     this.vectorStore = createVectorStore(config.vectorStore ?? {
-      dimensions: 1536, // Default for Claude embeddings
+      dimensions: 1536, // Default for embeddings
       similarity: 'cosine',
       backend: 'memory'
     });
@@ -66,7 +71,7 @@ export class Memory {
   async store(node: Omit<MemoryNode, 'id' | 'embedding'>): Promise<string> {
     // 1. Generate ID and embedding
     const id = crypto.randomUUID();
-    const embedding = await this.claude.generateEmbedding(node.content);
+    const embedding = await this.embeddings.generateEmbedding(node.content);
 
     // 2. Create full memory node
     const fullNode: MemoryNode = {
@@ -101,7 +106,7 @@ export class Memory {
     type?: MemoryType;
   } = {}): Promise<MemoryNode[]> {
     // 1. Generate query embedding
-    const queryEmbedding = await this.claude.generateEmbedding(query);
+    const queryEmbedding = await this.embeddings.generateEmbedding(query);
 
     // 2. Search vector store
     const matches = await this.vectorStore.query({
@@ -209,7 +214,7 @@ Return ratings as JSON array of numbers.`;
     for (const group of groups) {
       // 1. Generate merged content
       const mergedContent = await this.mergeNodes(group);
-      const mergedEmbedding = await this.claude.generateEmbedding(mergedContent);
+      const mergedEmbedding = await this.embeddings.generateEmbedding(mergedContent);
 
       // 2. Create consolidated node
       const consolidatedNode: MemoryNode = {

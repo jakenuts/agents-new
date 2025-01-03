@@ -133,7 +133,7 @@ autonomous-agents/
 ```bash
 # Claude API
 CLAUDE_API_KEY=your_api_key
-CLAUDE_MODEL=claude-3-opus-20240229
+CLAUDE_MODEL=claude-3-5-sonnet-20241022
 
 # Storage
 POSTGRES_URL=postgresql://user:pass@localhost:5432/agents

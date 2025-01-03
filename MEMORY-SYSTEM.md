@@ -295,7 +295,7 @@ const memorySystem = new MemorySystem({
   vectorDimensions: 1536,
   maxMemories: 10000,
   consolidationThreshold: 100,
-  embeddingModel: 'claude-3-opus-20240229',
+  embeddingModel: 'claude-3-5-sonnet-20241022',
   storageBackend: 'postgres'
 });
 

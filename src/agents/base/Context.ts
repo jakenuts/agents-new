@@ -1,9 +1,12 @@
 import type { ClaudeClient } from '../../claude/client.js';
-  import { VectorStore, VectorStoreConfig, createVectorStore, VectorMatch } from './VectorStore.js';
+import type { EmbeddingsProvider } from '../../embeddings/base.js';
+import { SimpleEmbeddingsProvider } from '../../embeddings/base.js';
+import { VectorStore, VectorStoreConfig, createVectorStore, VectorMatch } from './VectorStore.js';
 
 export interface ContextConfig {
   maxTokens: number;
   claude: ClaudeClient;
+  embeddings?: EmbeddingsProvider;
   vectorStore?: VectorStoreConfig;
 }
 
@@ -103,15 +106,17 @@ export class Context {
   private summaries: Map<string, string> = new Map();
   private config: ContextConfig;
   private claude: ClaudeClient;
+  private embeddings: EmbeddingsProvider;
   private vectorStore: VectorStore;
 
   constructor(config: ContextConfig) {
     this.config = config;
     this.claude = config.claude;
+    this.embeddings = config.embeddings ?? new SimpleEmbeddingsProvider();
 
     // Initialize vector store
     this.vectorStore = createVectorStore(config.vectorStore ?? {
-      dimensions: 1536, // Default for Claude embeddings
+      dimensions: 1536, // Default for embeddings
       similarity: 'cosine',
       backend: 'memory'
     });
@@ -124,7 +129,7 @@ export class Context {
   async add(node: Omit<ContextNode, 'id' | 'embedding'>): Promise<string> {
     // 1. Generate ID and embedding
     const id = crypto.randomUUID();
-    const embedding = await this.claude.generateEmbedding(node.content);
+    const embedding = await this.embeddings.generateEmbedding(node.content);
 
     // 2. Create full context node
     const fullNode: ContextNode = {
@@ -314,7 +319,7 @@ Create a concise summary that captures:
 3. Relevant context for future reference`;
 
     const summary = await this.claude.complete(prompt);
-    const summaryEmbedding = await this.claude.generateEmbedding(summary);
+    const summaryEmbedding = await this.embeddings.generateEmbedding(summary);
     
     // Replace old nodes with summary
     const summaryNode: ContextNode = {
@@ -412,7 +417,7 @@ Return ratings as JSON array of numbers.`;
     // Merge each group
     for (const group of groups) {
       const mergedContent = await this.mergeNodes(group);
-      const mergedEmbedding = await this.claude.generateEmbedding(mergedContent);
+      const mergedEmbedding = await this.embeddings.generateEmbedding(mergedContent);
 
       const consolidatedNode: ContextNode = {
         id: crypto.randomUUID(),
