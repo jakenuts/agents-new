@@ -36,3 +36,43 @@
 - Implement role-specific tool sets
 - Add validation for role definition files
 - Consider adding role inheritance/composition
+
+## 2024-01-04: Centralized Logging System Implementation
+
+### Changes Made
+- Implemented centralized logging system with multiple log levels (DEBUG, INFO, WARN, ERROR)
+- Added component-specific logging for Agent, Claude client, and Backplane
+- Integrated performance metrics and token usage tracking
+- Created comprehensive logging tests
+
+### Key Design Decisions
+1. **Logging Architecture**
+   - Centralized BaseLogger class with global instance
+   - Component-specific logging through LogComponent enum
+   - Flexible filtering with LogFilter interface
+   - Metadata support for rich logging context
+
+2. **Logging Integration**
+   - Agent logs initialization and task execution
+   - Claude client logs API calls and token usage
+   - Backplane logs connection lifecycle and message passing
+   - All components log errors and performance metrics
+
+3. **Testing Strategy**
+   - Dedicated logging integration tests
+   - Mock implementations for external dependencies
+   - Proper cleanup and logger state management
+   - Async operation handling
+
+### Benefits
+- Improved system observability
+- Better debugging capabilities
+- Performance monitoring through metrics
+- Token usage tracking for cost management
+- Structured logging with metadata
+
+### Next Steps
+- Add log persistence
+- Implement log rotation
+- Add log aggregation
+- Consider adding log streaming
