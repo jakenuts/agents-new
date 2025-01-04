@@ -28,6 +28,13 @@ The autonomous agent system is a TypeScript-based framework for creating AI agen
    - Communication backplane for agent coordination
    - Planning and execution logic
 
+5. **Logging System** [NEW]
+   - Centralized logging for all components
+   - Configurable log levels (DEBUG, INFO, WARN, ERROR)
+   - Performance metrics and token usage tracking
+   - Operation status and message monitoring
+   - Log rotation and management
+
 ## Implementation Tasks
 
 ### 1. Context System [IN PROGRESS]
@@ -72,6 +79,8 @@ The autonomous agent system is a TypeScript-based framework for creating AI agen
 - [x] Create communication backplane
 - [x] Add distributed agent coordination
 - [x] Implement agent state management
+- [x] Add role-based behavior through JSON configuration
+- [x] Implement proper cleanup routines
 
 ### 5. Communication Backplane [IN PROGRESS]
 - [x] Design backplane interface
@@ -79,19 +88,31 @@ The autonomous agent system is a TypeScript-based framework for creating AI agen
 - [x] Create shared context management
 - [x] Add agent discovery service
 - [x] Implement distributed context synchronization
+- [x] Add connection lifecycle management
+- [x] Implement proper cleanup routines
 - [ ] Create secure communication channels
 - [ ] Add message routing and filtering
 - [ ] Implement backplane monitoring
-- [x] Add connection lifecycle management
-- [x] Implement proper cleanup routines
 
-### 6. Testing & Documentation [IN PROGRESS]
+### 6. Logging System [NEW]
+- [ ] Design logging interface
+- [ ] Implement log levels
+- [ ] Add performance metrics tracking
+- [ ] Create token usage monitoring
+- [ ] Implement operation status logging
+- [ ] Add message tracking
+- [ ] Create log rotation system
+- [ ] Implement log filtering
+- [ ] Add log aggregation
+- [ ] Create logging utilities
+
+### 7. Testing & Documentation [IN PROGRESS]
 - [x] Create unit tests for Agent Framework
 - [x] Add integration tests for Agent Framework
 - [x] Add integration tests for Communication Backplane
+- [x] Add system documentation
 - [ ] Write API documentation
 - [ ] Create usage examples
-- [x] Add system documentation
 - [ ] Create setup guides
 - [ ] Write troubleshooting guides
 - [ ] Add performance benchmarks
@@ -99,8 +120,8 @@ The autonomous agent system is a TypeScript-based framework for creating AI agen
 ## Current Focus
 
 The current implementation focus is on:
-1. Implementing secure communication channels
-2. Adding message routing and filtering
+1. Implementing the logging system
+2. Adding secure communication channels
 3. Setting up backplane monitoring
 4. Completing documentation and examples
 
@@ -111,6 +132,7 @@ The current implementation focus is on:
    - Created role loading and validation
    - Refactored agent system to use role capabilities
    - Removed specialized agent implementations in favor of role-based behavior
+   - Added proper cleanup and connection management
 
 2. **Agent Communication**
    - Designed and implemented message-based coordination
@@ -128,22 +150,28 @@ The current implementation focus is on:
 
 ## Next Steps
 
-1. Enhance Communication Backplane
+1. Implement Logging System
+   - Add centralized logging
+   - Implement log levels
+   - Add performance tracking
+   - Create log management
+
+2. Enhance Communication Backplane
    - Add secure communication channels
    - Implement message routing and filtering
    - Add backplane monitoring capabilities
 
-2. Complete Context System
+3. Complete Context System
    - Finish context pruning
    - Add vector store integration
    - Implement context search
 
-3. Enhance Memory System
+4. Enhance Memory System
    - Implement distributed memory storage
    - Add cross-agent memory sharing
    - Create memory optimization routines
 
-4. Improve Documentation
+5. Improve Documentation
    - Add API documentation
    - Create setup guides
    - Write usage examples
@@ -170,6 +198,7 @@ The current implementation focus is on:
 6. **Maintainability**: Clear code organization and documentation
 7. **Distributability**: Support for distributed agent deployment
 8. **Security**: Secure communication and access control
+9. **Observability**: Comprehensive logging and monitoring
 
 ## Notes
 
@@ -181,3 +210,4 @@ The current implementation focus is on:
 - Agents should be deployable as independent microservices
 - Communication backplane enables distributed coordination
 - Role definitions allow easy addition of new agent types
+- Logging system provides insights into system behavior and performance
