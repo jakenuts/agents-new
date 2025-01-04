@@ -1,12 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../logging/base.js';
 import { LogComponent } from '../logging/types.js';
+import { metricsService } from '../metrics/service.js';
 
 export interface ClaudeConfig {
   apiKey: string;
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  role?: string;
 }
 
 export interface CompletionOptions {
@@ -26,17 +28,22 @@ export class ClaudeClient {
   private defaultMaxTokens: number;
   private defaultTemperature: number;
   private totalTokensUsed: number = 0;
+  private role: string;
+  readonly config: ClaudeConfig;
 
   constructor(config: ClaudeConfig) {
     this.client = new Anthropic({apiKey:config.apiKey});
     this.model = config.model || 'claude-3-5-sonnet-20241022';
     this.defaultMaxTokens = config.maxTokens || 1000;
     this.defaultTemperature = config.temperature || 0.7;
+    this.role = config.role || 'default';
+    this.config = { ...config };
 
     logger.info(LogComponent.CLAUDE, 'Initialized Claude client', {
       model: this.model,
       defaultMaxTokens: this.defaultMaxTokens,
-      defaultTemperature: this.defaultTemperature
+      defaultTemperature: this.defaultTemperature,
+      role: this.role
     });
   }
 
@@ -72,14 +79,25 @@ export class ClaudeClient {
       const duration = Date.now() - startTime;
       const inputTokens = response.usage.input_tokens;
       const outputTokens = response.usage.output_tokens;
+      const responseLength = response.content[0]?.type === 'text' ? response.content[0].text.length : 0;
       this.totalTokensUsed += inputTokens + outputTokens;
+
+      // Record metrics
+      metricsService.recordModelUsage(this.role, {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        contextLength: prompt.length + (systemPrompt ? systemPrompt.length : 0),
+        responseLength,
+        duration
+      });
 
       logger.info(LogComponent.CLAUDE, 'Completion successful', {
         duration,
         inputTokens,
         outputTokens,
         totalTokensUsed: this.totalTokensUsed,
-        responseLength: response.content[0]?.type === 'text' ? response.content[0].text.length : 0
+        responseLength
       });
 
       const firstContent = response.content[0];
@@ -132,5 +150,13 @@ export class ClaudeClient {
 
   getTotalTokensUsed(): number {
     return this.totalTokensUsed;
+  }
+
+  getMetricsSummary() {
+    return metricsService.getMetricsSummary();
+  }
+
+  resetMetrics() {
+    metricsService.resetMetrics();
   }
 }

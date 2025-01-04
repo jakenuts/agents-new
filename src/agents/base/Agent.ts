@@ -5,6 +5,8 @@ import { promises as fs } from 'fs';
 import { logger } from '../../logging/base.js';
 import { LogComponent } from '../../logging/types.js';
 import { RoleDefinition, validateRole } from '../../roles/types.js';
+import { RoleLoader } from '../../roles/loader.js';
+import { Memory } from './Memory.js';
 
 export interface AgentConfig {
   rolePath: string;
@@ -20,6 +22,8 @@ export interface AgentConfig {
     'shareContext' | 
     'findCollaborators'
   >;
+  memory: Memory;
+  roleLoader: RoleLoader;
 }
 
 export interface AgentMessage {
@@ -31,8 +35,10 @@ export interface AgentMessage {
 export class Agent {
   private readonly rolePath: string;
   private readonly tools: Tool[];
-  private readonly claude: ClaudeClient;
+  private claude: ClaudeClient;
   private readonly backplane: AgentConfig['backplane'];
+  private readonly memory: Memory;
+  private readonly roleLoader: RoleLoader;
   private roleDefinition: RoleDefinition | null = null;
   private isInitialized: boolean = false;
 
@@ -41,6 +47,8 @@ export class Agent {
     this.tools = config.tools;
     this.claude = config.claude;
     this.backplane = config.backplane;
+    this.memory = config.memory;
+    this.roleLoader = config.roleLoader;
   }
 
   async init(config: AgentConfig): Promise<void> {
@@ -48,20 +56,25 @@ export class Agent {
       if (!this.isInitialized) {
         logger.info(LogComponent.AGENT, `Initializing agent with role from ${this.rolePath}`);
         
-        // Load role definition
-        const roleContent = await fs.readFile(this.rolePath, 'utf-8');
-        const parsedRole = JSON.parse(roleContent);
+        // Load role definition using role loader
+        const loadedRole = await this.roleLoader.loadRole(this.rolePath);
         
         // Validate role definition
-        const errors = validateRole(parsedRole);
+        const errors = validateRole(loadedRole.definition);
         if (errors.length > 0) {
-          const errorMessage = `Invalid role definition: ${errors.map(e => `${e.field}: ${e.message}`).join(', ')}`;
+          const errorMessage = `Invalid role definition: ${errors.map(e => `${e.field}: ${e.message}`).join(' ')}`;
           logger.error(LogComponent.AGENT, errorMessage);
           throw new Error(errorMessage);
         }
 
-        this.roleDefinition = parsedRole as RoleDefinition;
+        this.roleDefinition = loadedRole.definition;
         this.isInitialized = true;
+
+        // Create new Claude client with role
+        this.claude = new ClaudeClient({
+          ...this.claude.config,
+          role: this.roleDefinition.name
+        });
 
         logger.info(LogComponent.AGENT, 'Agent initialized successfully', {
           role: this.roleDefinition.name,
@@ -148,5 +161,13 @@ Please provide your response based on your role, capabilities, and available too
         result: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+
+  getMetricsSummary() {
+    return this.claude.getMetricsSummary();
+  }
+
+  resetMetrics() {
+    this.claude.resetMetrics();
   }
 }

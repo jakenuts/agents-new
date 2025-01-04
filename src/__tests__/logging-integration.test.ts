@@ -3,6 +3,8 @@ import { LogLevel, LogComponent } from '../logging/types.js';
 import { Agent } from '../agents/base/Agent.js';
 import { ClaudeClient } from '../claude/client.js';
 import { RedisBackplane } from '../backplane/redis/index.js';
+import { Memory } from '../agents/base/Memory.js';
+import { RoleLoader } from '../roles/loader.js';
 import path from 'path';
 
 declare global {
@@ -18,11 +20,45 @@ jest.mock('../claude/client.js', () => {
   return { ClaudeClient };
 });
 
+// Mock Memory
+jest.mock('../agents/base/Memory.js', () => ({
+  Memory: jest.fn().mockImplementation(() => ({
+    initialize: jest.fn().mockResolvedValue(undefined),
+    store: jest.fn().mockResolvedValue('test-id'),
+    recall: jest.fn().mockResolvedValue([]),
+    optimize: jest.fn().mockResolvedValue(undefined)
+  }))
+}));
+
+// Mock RoleLoader
+jest.mock('../roles/loader.js', () => ({
+  RoleLoader: jest.fn().mockImplementation(() => ({
+    loadRole: jest.fn().mockImplementation((path) => {
+      return Promise.resolve({
+        definition: {
+          name: 'Test Role',
+          description: 'Test role for logging',
+          responsibilities: ['Test'],
+          capabilities: { test: 'Test capability' },
+          tools: {},
+          instructions: ['Test instruction']
+        },
+        context: {
+          state: {},
+          collaborators: new Map()
+        }
+      });
+    })
+  }))
+}));
+
 describe('Logging System Integration', () => {
   let testLogger: BaseLogger;
   let agent: Agent;
   let claude: ClaudeClient;
   let backplane: RedisBackplane;
+  let memory: Memory;
+  let roleLoader: RoleLoader;
   let originalLogger: BaseLogger;
 
   beforeEach(async () => {
@@ -38,6 +74,27 @@ describe('Logging System Integration', () => {
     
     // Replace the global logger
     global.logger = testLogger;
+
+    // Initialize components
+    claude = new ClaudeClient({
+      apiKey: 'test-key',
+      model: 'test-model'
+    });
+
+    memory = new Memory({
+      shortTermLimit: 100,
+      summarizeInterval: '1h',
+      pruneThreshold: 0.5,
+      claude,
+      vectorStore: {
+        dimensions: 1536,
+        similarity: 'cosine',
+        backend: 'memory'
+      }
+    });
+    await memory.initialize();
+
+    roleLoader = new RoleLoader();
 
     // Wait for next tick to ensure logger is properly set
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -77,12 +134,7 @@ describe('Logging System Integration', () => {
   });
 
   test('logs agent initialization and task execution', async () => {
-    // Initialize components
-    claude = new ClaudeClient({
-      apiKey: 'test-key',
-      model: 'test-model'
-    });
-
+    // Initialize backplane
     backplane = new RedisBackplane({
       host: 'localhost',
       port: 6379,
@@ -100,14 +152,18 @@ describe('Logging System Integration', () => {
       rolePath: path.join(process.cwd(), 'src/__mocks__/roles/coder.json'),
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     await agent.init({
       rolePath: path.join(process.cwd(), 'src/__mocks__/roles/coder.json'),
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     const task = {
@@ -183,5 +239,32 @@ describe('Logging System Integration', () => {
     const logs = testLogger.getEntries();
     expect(logs).toHaveLength(1);
     expect(logs[0].metadata).toMatchObject(metadata);
+  });
+
+  test('logs memory operations', async () => {
+    const task = {
+      goal: 'Test memory',
+      task: 'Store and recall information',
+      data: { key: 'value' }
+    };
+
+    await memory.store({
+      type: 'fact',
+      content: 'Test memory content',
+      timestamp: new Date(),
+      metadata: { test: true }
+    });
+
+    await memory.recall('Test memory content');
+
+    // Wait for logs to be processed
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const logs = testLogger.getEntries();
+    const memoryLogs = logs.filter(log => log.component === LogComponent.MEMORY);
+
+    expect(memoryLogs.length).toBeGreaterThan(0);
+    expect(memoryLogs.some(log => log.message.includes('Storing memory'))).toBe(true);
+    expect(memoryLogs.some(log => log.message.includes('Recalling memory'))).toBe(true);
   });
 });

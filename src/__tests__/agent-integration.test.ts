@@ -3,6 +3,8 @@ import { Agent } from '../agents/base/Agent.js';
 import { Backplane, BackplaneConfig } from '../backplane/base.js';
 import { RedisBackplaneFactory } from '../backplane/redis/index.js';
 import { ClaudeClient } from '../claude/client.js';
+import { Memory } from '../agents/base/Memory.js';
+import { RoleLoader } from '../roles/loader.js';
 
 // Load environment variables
 config();
@@ -13,6 +15,8 @@ jest.setTimeout(30000);
 describe('Agent Integration Tests', () => {
   let backplane: Backplane;
   let claude: ClaudeClient;
+  let memory: Memory;
+  let roleLoader: RoleLoader;
   let backplaneConfig: BackplaneConfig;
   let backplaneFactory: RedisBackplaneFactory;
 
@@ -42,6 +46,25 @@ describe('Agent Integration Tests', () => {
     backplane = backplaneFactory.createBackplane(backplaneConfig);
     await backplane.connect(backplaneConfig);
     console.log('Connected to Redis backplane');
+
+    // Initialize memory system
+    memory = new Memory({
+      shortTermLimit: 100,
+      summarizeInterval: '1h',
+      pruneThreshold: 0.5,
+      claude,
+      vectorStore: {
+        dimensions: 1536,
+        similarity: 'cosine',
+        backend: 'memory'
+      }
+    });
+    await memory.initialize();
+    console.log('Memory system initialized');
+
+    // Initialize role loader
+    roleLoader = new RoleLoader();
+    console.log('Role loader initialized');
   });
 
   afterAll(async () => {
@@ -60,14 +83,18 @@ describe('Agent Integration Tests', () => {
       rolePath: 'src/roles/coder.json',
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     await coder.init({
       rolePath: 'src/roles/coder.json',
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     const result = await coder.execute({
@@ -97,14 +124,18 @@ function calculateTotal(items) {
       rolePath: 'src/roles/project-manager.json',
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     await manager.init({
       rolePath: 'src/roles/project-manager.json',
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     const result = await manager.execute({
@@ -132,28 +163,36 @@ Add user authentication:
       rolePath: 'src/roles/coder.json',
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     const manager = new Agent({
       rolePath: 'src/roles/project-manager.json',
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     await coder.init({
       rolePath: 'src/roles/coder.json',
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     await manager.init({
       rolePath: 'src/roles/project-manager.json',
       tools: [],
       claude,
-      backplane
+      backplane,
+      memory,
+      roleLoader
     });
 
     const task = {
@@ -171,5 +210,52 @@ Add user authentication:
     expect(managerResult.success).toBe(true);
     expect(coderResult.result).not.toEqual(managerResult.result);
     console.log('Completed role behavior test');
+  });
+
+  it('should use memory for context', async () => {
+    console.log('Starting memory context test...');
+    const coder = new Agent({
+      rolePath: 'src/roles/coder.json',
+      tools: [],
+      claude,
+      backplane,
+      memory,
+      roleLoader
+    });
+
+    await coder.init({
+      rolePath: 'src/roles/coder.json',
+      tools: [],
+      claude,
+      backplane,
+      memory,
+      roleLoader
+    });
+
+    // First task establishes context
+    const task1 = {
+      goal: 'Setup project',
+      task: 'Initialize React project structure',
+      data: {
+        requirements: 'Create a new React project with TypeScript and testing setup'
+      }
+    };
+
+    // Second task should reference context from first task
+    const task2 = {
+      goal: 'Add feature',
+      task: 'Implement user authentication',
+      data: {
+        requirements: 'Add user authentication to the React project'
+      }
+    };
+
+    const result1 = await coder.execute(task1);
+    const result2 = await coder.execute(task2);
+
+    expect(result1.success).toBe(true);
+    expect(result2.success).toBe(true);
+    expect(result2.result).toContain('React');
+    console.log('Completed memory context test');
   });
 });
