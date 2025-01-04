@@ -1,8 +1,16 @@
 import { Logger, LogLevel, LogComponent, LogEntry, LogFilter } from './types.js';
 
 export class BaseLogger implements Logger {
+  private static instance: BaseLogger;
   private entries: LogEntry[] = [];
   private minLevel: LogLevel = LogLevel.INFO;
+
+  constructor() {
+    if (!BaseLogger.instance) {
+      BaseLogger.instance = this;
+    }
+    return BaseLogger.instance;
+  }
 
   private log(level: LogLevel, component: LogComponent, message: string, metadata?: Record<string, any>): void {
     if (level < this.minLevel) return;
@@ -15,12 +23,15 @@ export class BaseLogger implements Logger {
       metadata
     };
 
+    // Store the entry in memory
     this.entries.push(entry);
     
-    // Also output to console for immediate visibility
+    // Format metadata for console output
     const levelStr = LogLevel[level];
-    const metadataStr = metadata ? ` ${JSON.stringify(metadata)}` : '';
-    console.log(`[${entry.timestamp.toISOString()}] ${levelStr} [${component}] ${message}${metadataStr}`);
+    const metadataStr = metadata ? JSON.stringify(metadata).replace(/"/g, '') : '';
+    
+    // Output to console for immediate visibility
+    console.log(`[${entry.timestamp.toISOString()}] ${levelStr} [${component}] ${message}${metadataStr ? ' ' + metadataStr : ''}`);
   }
 
   debug(component: LogComponent, message: string, metadata?: Record<string, any>): void {
@@ -40,7 +51,7 @@ export class BaseLogger implements Logger {
   }
 
   getEntries(filter?: LogFilter): LogEntry[] {
-    let filtered = this.entries;
+    let filtered = [...this.entries]; // Create a copy to avoid external modification
 
     if (filter) {
       filtered = filtered.filter(entry => {
@@ -52,7 +63,7 @@ export class BaseLogger implements Logger {
       });
     }
 
-    return [...filtered]; // Return copy to prevent external modification
+    return filtered;
   }
 
   setMinLevel(level: LogLevel): void {
@@ -64,5 +75,15 @@ export class BaseLogger implements Logger {
   }
 }
 
-// Global logger instance
-export const logger = new BaseLogger();
+// Create a global logger instance
+const globalLogger = new BaseLogger();
+
+// Export both the class and the global instance
+export { globalLogger as logger };
+
+// Make logger globally available
+if (typeof global !== 'undefined') {
+  (global as any).logger = globalLogger;
+} else if (typeof window !== 'undefined') {
+  (window as any).logger = globalLogger;
+}

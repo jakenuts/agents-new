@@ -9,12 +9,26 @@
     "Identify and mitigate project risks",
     "Ensure project requirements are met"
   ],
-  "capabilities": [
-    "project_planning",
-    "task_breakdown",
-    "resource_management",
-    "risk_assessment",
-    "progress_tracking",
-    "stakeholder_communication"
+  "capabilities": {
+    "project_planning": "Ability to plan and organize project tasks",
+    "task_breakdown": "Ability to break down complex features into tasks",
+    "resource_management": "Ability to coordinate team efforts and resources",
+    "risk_assessment": "Ability to identify and mitigate project risks",
+    "progress_tracking": "Ability to track project progress and milestones",
+    "stakeholder_communication": "Ability to communicate with stakeholders"
+  },
+  "tools": {
+    "project_tracker": "Tool for tracking project progress",
+    "task_manager": "Tool for managing and assigning tasks",
+    "resource_planner": "Tool for resource allocation",
+    "risk_matrix": "Tool for risk assessment and mitigation",
+    "communication_platform": "Tool for stakeholder communication"
+  },
+  "instructions": [
+    "Break down features into manageable tasks",
+    "Track project progress and update stakeholders",
+    "Identify and mitigate potential risks",
+    "Coordinate team efforts and resources",
+    "Ensure project requirements and timelines are met"
   ]
 }

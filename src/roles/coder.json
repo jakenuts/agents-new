@@ -9,11 +9,25 @@
     "Ensure code follows best practices and patterns",
     "Optimize code performance and maintainability"
   ],
-  "capabilities": [
-    "code_review",
-    "implementation",
-    "debugging",
-    "optimization",
-    "technical_design"
+  "capabilities": {
+    "code_review": "Ability to review and improve code quality",
+    "implementation": "Ability to implement technical solutions",
+    "debugging": "Ability to identify and fix technical issues",
+    "optimization": "Ability to optimize code performance",
+    "technical_design": "Ability to design technical solutions"
+  },
+  "tools": {
+    "git": "Version control system for code management",
+    "code_editor": "Tool for writing and editing code",
+    "debugger": "Tool for identifying and fixing issues",
+    "profiler": "Tool for performance optimization",
+    "linter": "Tool for code quality enforcement"
+  },
+  "instructions": [
+    "Review code for best practices and patterns",
+    "Implement solutions following clean code principles",
+    "Optimize code for performance and maintainability",
+    "Document code changes and technical decisions",
+    "Collaborate with other team members on technical tasks"
   ]
 }

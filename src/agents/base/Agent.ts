@@ -4,6 +4,7 @@ import { ClaudeClient } from '../../claude/client.js';
 import { promises as fs } from 'fs';
 import { logger } from '../../logging/base.js';
 import { LogComponent } from '../../logging/types.js';
+import { RoleDefinition, validateRole } from '../../roles/types.js';
 
 export interface AgentConfig {
   rolePath: string;
@@ -32,7 +33,7 @@ export class Agent {
   private readonly tools: Tool[];
   private readonly claude: ClaudeClient;
   private readonly backplane: AgentConfig['backplane'];
-  private roleDefinition: any;
+  private roleDefinition: RoleDefinition | null = null;
   private isInitialized: boolean = false;
 
   constructor(config: AgentConfig) {
@@ -49,7 +50,17 @@ export class Agent {
         
         // Load role definition
         const roleContent = await fs.readFile(this.rolePath, 'utf-8');
-        this.roleDefinition = JSON.parse(roleContent);
+        const parsedRole = JSON.parse(roleContent);
+        
+        // Validate role definition
+        const errors = validateRole(parsedRole);
+        if (errors.length > 0) {
+          const errorMessage = `Invalid role definition: ${errors.map(e => `${e.field}: ${e.message}`).join(', ')}`;
+          logger.error(LogComponent.AGENT, errorMessage);
+          throw new Error(errorMessage);
+        }
+
+        this.roleDefinition = parsedRole as RoleDefinition;
         this.isInitialized = true;
 
         logger.info(LogComponent.AGENT, 'Agent initialized successfully', {
@@ -67,7 +78,7 @@ export class Agent {
   }
 
   async execute(task: { goal: string; task: string; data: any }): Promise<{ success: boolean; result: any }> {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !this.roleDefinition) {
       const error = new Error('Agent not initialized. Call init() first.');
       logger.error(LogComponent.AGENT, 'Attempted to execute task before initialization');
       throw error;
@@ -87,12 +98,25 @@ ${this.roleDefinition.description}
 Your responsibilities include:
 ${this.roleDefinition.responsibilities.join('\n')}
 
+Your capabilities:
+${Object.entries(this.roleDefinition.capabilities)
+  .map(([name, desc]) => `- ${name}: ${desc}`)
+  .join('\n')}
+
+Available tools:
+${Object.entries(this.roleDefinition.tools)
+  .map(([name, desc]) => `- ${name}: ${desc}`)
+  .join('\n')}
+
+Instructions for your role:
+${this.roleDefinition.instructions.join('\n')}
+
 Your current task:
 Goal: ${task.goal}
 Task: ${task.task}
 Data: ${JSON.stringify(task.data, null, 2)}
 
-Please provide your response based on your role and capabilities.
+Please provide your response based on your role, capabilities, and available tools.
 `;
 
     try {

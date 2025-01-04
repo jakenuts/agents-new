@@ -5,6 +5,10 @@ import { ClaudeClient } from '../claude/client.js';
 import { RedisBackplane } from '../backplane/redis/index.js';
 import path from 'path';
 
+declare global {
+  var logger: BaseLogger;
+}
+
 // Mock redis
 jest.mock('redis');
 
@@ -19,30 +23,65 @@ describe('Logging System Integration', () => {
   let agent: Agent;
   let claude: ClaudeClient;
   let backplane: RedisBackplane;
+  let originalLogger: BaseLogger;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     
+    // Store original logger
+    originalLogger = global.logger;
+    
     // Create and set up logger
     testLogger = new BaseLogger();
     testLogger.setMinLevel(LogLevel.DEBUG);
+    testLogger.clearEntries(); // Clear any existing entries
     
     // Replace the global logger
-    const originalLogger = (global as any).logger;
-    (global as any).logger = testLogger;
-    (global as any).__originalLogger = originalLogger;
+    global.logger = testLogger;
 
     // Wait for next tick to ensure logger is properly set
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setTimeout(resolve, 100));
+  });
+
+  afterEach(async () => {
+    if (backplane) {
+      await backplane.cleanup();
+    }
     
-    // Initialize test components after logger is set up
+    // Restore original logger
+    global.logger = originalLogger;
+    testLogger.clearEntries(); // Clear entries after each test
+  });
+
+  test('logs Claude client initialization', async () => {
+    // Create a new client to trigger initialization logs
     claude = new ClaudeClient({
       apiKey: 'test-key',
       model: 'test-model'
     });
 
-    // Wait for next tick to ensure initialization logs are captured
-    await new Promise(resolve => setImmediate(resolve));
+    // Wait for logs to be processed
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Get logs before any cleanup
+    const logs = testLogger.getEntries();
+    const claudeLogs = logs.filter(log => log.component === LogComponent.CLAUDE);
+
+    expect(claudeLogs.length).toBeGreaterThan(0);
+    const initLog = claudeLogs.find(log => log.message.includes('Initialized Claude client'));
+    expect(initLog).toBeDefined();
+    expect(initLog?.level).toBe(LogLevel.INFO);
+    expect(initLog?.metadata).toMatchObject({
+      model: 'test-model'
+    });
+  });
+
+  test('logs agent initialization and task execution', async () => {
+    // Initialize components
+    claude = new ClaudeClient({
+      apiKey: 'test-key',
+      model: 'test-model'
+    });
 
     backplane = new RedisBackplane({
       host: 'localhost',
@@ -64,51 +103,6 @@ describe('Logging System Integration', () => {
       backplane
     });
 
-    // Store original logger for cleanup
-    (global as any).__originalLogger = originalLogger;
-  });
-
-  afterEach(async () => {
-    // Cleanup Redis connections
-    await backplane.cleanup();
-    
-    // Restore original logger
-    (global as any).logger = (global as any).__originalLogger;
-    delete (global as any).__originalLogger;
-    
-    testLogger.clearEntries();
-    jest.clearAllMocks();
-  });
-
-  test('logs Claude client initialization', async () => {
-    // Clear any existing logs
-    testLogger.clearEntries();
-    
-    // Create a new client to trigger initialization logs
-    const newClaude = new ClaudeClient({
-      apiKey: 'test-key',
-      model: 'test-model'
-    });
-
-    // Wait for next tick to ensure logs are processed
-    await new Promise(resolve => setImmediate(resolve));
-
-    const logs = testLogger.getEntries();
-    const claudeLogs = logs.filter(log => log.component === LogComponent.CLAUDE);
-
-    expect(claudeLogs.length).toBeGreaterThan(0);
-    const initLog = claudeLogs.find(log => log.message.includes('Initialized Claude client'));
-    expect(initLog).toBeDefined();
-    expect(initLog?.level).toBe(LogLevel.INFO);
-    expect(initLog?.metadata).toMatchObject({
-      model: 'test-model'
-    });
-  });
-
-  test('logs agent initialization and task execution', async () => {
-    // Clear any existing logs
-    testLogger.clearEntries();
-    
     await agent.init({
       rolePath: path.join(process.cwd(), 'src/__mocks__/roles/coder.json'),
       tools: [],
@@ -124,9 +118,10 @@ describe('Logging System Integration', () => {
 
     await agent.execute(task);
 
-    // Wait for next tick to ensure logs are processed
-    await new Promise(resolve => setImmediate(resolve));
+    // Wait for logs to be processed
+    await new Promise(resolve => setTimeout(resolve, 100));
 
+    // Get logs before any cleanup
     const logs = testLogger.getEntries();
     const agentLogs = logs.filter(log => log.component === LogComponent.AGENT);
 
@@ -138,16 +133,28 @@ describe('Logging System Integration', () => {
   });
 
   test('logs backplane operations', async () => {
-    // Clear any existing logs
-    testLogger.clearEntries();
-    
-    // Backplane is already connected in beforeEach
+    // Initialize backplane
+    backplane = new RedisBackplane({
+      host: 'localhost',
+      port: 6379,
+      prefix: 'test',
+      pubsub: {
+        messageChannel: 'test-messages',
+        contextChannel: 'test-context',
+        discoveryChannel: 'test-discovery'
+      }
+    });
+
+    await backplane.connect({ host: 'localhost', port: 6379 });
+
+    // Perform operations
     await backplane.sendMessage('test-agent', { type: 'TEST', content: 'test' });
     await backplane.broadcastMessage({ type: 'BROADCAST', content: 'test' });
 
-    // Wait for next tick to ensure logs are processed
-    await new Promise(resolve => setImmediate(resolve));
+    // Wait for logs to be processed
+    await new Promise(resolve => setTimeout(resolve, 100));
 
+    // Get logs before any cleanup
     const logs = testLogger.getEntries();
     const backplaneLogs = logs.filter(log => log.component === LogComponent.BACKPLANE);
 
