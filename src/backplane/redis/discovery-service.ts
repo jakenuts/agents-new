@@ -11,7 +11,9 @@ export class RedisDiscoveryService implements DiscoveryService {
   private readonly agentPrefix: string;
   private readonly heartbeatInterval: number = 30000; // 30 seconds
   private readonly agentTTL: number = 86400; // 24 hours
-  private heartbeatTimer?: ReturnType<typeof setInterval>;
+  private heartbeatTimer?: NodeJS.Timeout;
+  private cleanupTimer?: NodeJS.Timeout;
+  private subscriber?: RedisClientType;
   private watchers: Set<(event: { type: 'add' | 'remove' | 'update'; agent: AgentInfo }) => void> = new Set();
 
   constructor(
@@ -25,10 +27,10 @@ export class RedisDiscoveryService implements DiscoveryService {
 
   async initialize(): Promise<void> {
     // Subscribe to discovery events
-    const subscriber = this.client.duplicate();
-    await subscriber.connect();
+    this.subscriber = this.client.duplicate();
+    await this.subscriber.connect();
 
-    await subscriber.subscribe(this.discoveryChannel, async (message) => {
+    await this.subscriber.subscribe(this.discoveryChannel, async (message) => {
       try {
         const event = JSON.parse(message) as {
           type: 'add' | 'remove' | 'update';
@@ -48,8 +50,29 @@ export class RedisDiscoveryService implements DiscoveryService {
       }
     });
 
-    // Start cleanup job
-    this.startCleanup();
+    await this.startCleanup();
+  }
+
+  async cleanup(): Promise<void> {
+    // Stop timers
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
+
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+
+    // Disconnect subscriber
+    if (this.subscriber) {
+      await this.subscriber.quit();
+      this.subscriber = undefined;
+    }
+
+    // Clear watchers
+    this.watchers.clear();
   }
 
   async registerAgent(info: AgentInfo): Promise<void> {
@@ -198,7 +221,9 @@ export class RedisDiscoveryService implements DiscoveryService {
           );
         }
       } catch (error) {
-        console.error('Error sending heartbeat:', error);
+        if (error instanceof Error) {
+          console.error('Error sending heartbeat:', error.message);
+        }
       }
     }, this.heartbeatInterval);
   }
@@ -212,7 +237,7 @@ export class RedisDiscoveryService implements DiscoveryService {
 
   private async startCleanup(): Promise<void> {
     // Run cleanup every minute
-    setInterval(async () => {
+    this.cleanupTimer = setInterval(async () => {
       try {
         const keys = await this.client.keys(`${this.agentPrefix}*`);
         const now = Date.now();
@@ -232,7 +257,9 @@ export class RedisDiscoveryService implements DiscoveryService {
           })
         );
       } catch (error) {
-        console.error('Error in cleanup job:', error);
+        if (error instanceof Error) {
+          console.error('Error in cleanup job:', error.message);
+        }
       }
     }, 60000);
   }
